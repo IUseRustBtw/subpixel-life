@@ -8,3 +8,8 @@ rand = "0.8.5"
 rayon = "1.10.0"
 softbuffer = "0.4.6"
 winit = "0.29"
+
+[profile.release]
+opt-level = 3
+codegen-units = 1
+lto = true
