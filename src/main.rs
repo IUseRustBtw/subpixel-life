@@ -8,6 +8,7 @@ use winit::{
     dpi::PhysicalSize,
     event::{Event, WindowEvent},
     event_loop::{ControlFlow, EventLoop},
+    keyboard::{KeyCode, PhysicalKey},
     window::WindowBuilder,
 };
 
@@ -63,7 +64,7 @@ impl GameOfLife {
 
 impl App for GameOfLife {
     fn tick(&mut self) {
-        let start = Instant::now();
+        // let start = Instant::now();
 
         let width = self.width;
 
@@ -89,24 +90,38 @@ impl App for GameOfLife {
         self.cells_next = Some(cells_next);
         std::mem::swap(&mut self.cells_current, self.cells_next.as_mut().unwrap());
 
-        println!("{:?}", start.elapsed());
+        // println!("{:?}", start.elapsed());
     }
 
     fn draw(&self, pixels: &mut [u32]) {
-        assert_eq!(self.cells_current.len(), pixels.len());
+        pixels
+            .par_iter_mut()
+            .enumerate()
+            .for_each(|(index, pixel)| {
+                let x = (index * 3) as u32 % self.width;
+                let y = (index * 3) as u32 / self.width;
 
-        (0..self.cells_current.len()).for_each(|i| {
-            if self.cells_current[i] {
-                pixels[i] = 0xFFFFFFFF;
-            } else {
-                pixels[i] = 0;
-            }
-        });
+                let mut color = 0xFF000000;
+
+                if self.cells_current[self.index(x, y)] {
+                    color += 0xFF0000;
+                }
+
+                if self.cells_current[self.index(x + 1, y)] {
+                    color += 0xFF00;
+                }
+
+                if self.cells_current[self.index(x + 2, y)] {
+                    color += 0xFF;
+                }
+
+                *pixel = color;
+            });
     }
 }
 
 fn main() {
-    let mut game = GameOfLife::new(2048, 1024);
+    let mut game = GameOfLife::new(2048 * 3, 1024);
 
     game.set_cell(100, 100, true);
     game.set_cell(101, 101, true);
@@ -139,10 +154,12 @@ fn run(mut app: impl App, title: impl ToString, width: u32, height: u32) {
     let mut next_frame = Instant::now();
     let frame_time = Duration::from_secs_f32(1.0 / 144.0);
 
+    let mut paused = false;
+
     event_loop
         .run(|event, target| match event {
             Event::AboutToWait => {
-                if Instant::now() >= next_frame {
+                if Instant::now() >= next_frame && !paused {
                     app.tick();
                     window.request_redraw();
                     next_frame += frame_time;
@@ -170,6 +187,16 @@ fn run(mut app: impl App, title: impl ToString, width: u32, height: u32) {
 
                     window.pre_present_notify();
                     surface.present().unwrap();
+                }
+                WindowEvent::KeyboardInput { event, .. } => {
+                    let keycode = match event.physical_key {
+                        PhysicalKey::Code(keycode) => keycode,
+                        PhysicalKey::Unidentified(_) => panic!(),
+                    };
+
+                    if keycode == KeyCode::Space && !event.state.is_pressed() {
+                        paused = !paused;
+                    }
                 }
                 WindowEvent::CloseRequested => target.exit(),
                 _ => {}
