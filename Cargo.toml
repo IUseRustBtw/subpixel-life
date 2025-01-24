@@ -1,0 +1,9 @@
+[package]
+name = "subpixel-life"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+rayon = "1.10.0"
+softbuffer = "0.4.6"
+winit = "0.29"
