@@ -3,13 +3,13 @@ use std::{
     time::{Duration, Instant},
 };
 
+use rand::Rng;
 use rayon::iter::{IndexedParallelIterator, IntoParallelRefMutIterator, ParallelIterator};
 use winit::{
-    dpi::PhysicalSize,
     event::{Event, WindowEvent},
     event_loop::{ControlFlow, EventLoop},
     keyboard::{KeyCode, PhysicalKey},
-    window::WindowBuilder,
+    window::{Fullscreen, WindowBuilder},
 };
 
 struct GameOfLife {
@@ -29,9 +29,9 @@ impl GameOfLife {
         }
     }
 
-    fn set_cell(&mut self, x: u32, y: u32, value: bool) {
-        self.cells_current[(x + y * self.width) as usize] = value;
-    }
+    // fn set_cell(&mut self, x: u32, y: u32, value: bool) {
+    //     self.cells_current[(x + y * self.width) as usize] = value;
+    // }
 
     fn index(&self, x: u32, y: u32) -> usize {
         (x + y * self.width) as usize
@@ -63,6 +63,17 @@ impl GameOfLife {
 }
 
 impl App for GameOfLife {
+    fn new(width: u32, height: u32) -> Self {
+        let mut game = GameOfLife::new(width * 3, height);
+
+        game.cells_current.par_iter_mut().for_each(|cell| {
+            let mut rng = rand::thread_rng();
+            *cell = rng.gen_bool(0.5);
+        });
+
+        game
+    }
+
     fn tick(&mut self) {
         // let start = Instant::now();
 
@@ -121,29 +132,26 @@ impl App for GameOfLife {
 }
 
 fn main() {
-    let mut game = GameOfLife::new(2048 * 3, 1024);
-
-    game.set_cell(100, 100, true);
-    game.set_cell(101, 101, true);
-    game.set_cell(102, 101, true);
-    game.set_cell(102, 100, true);
-    game.set_cell(102, 99, true);
-
-    run(game, "Subpixel Game of Life", 2048, 1024);
+    run::<GameOfLife>("Subpixel Game of Life");
 }
 
 trait App {
+    fn new(width: u32, height: u32) -> Self;
     fn tick(&mut self);
     fn draw(&self, pixels: &mut [u32]);
 }
 
-fn run(mut app: impl App, title: impl ToString, width: u32, height: u32) {
+fn run<T: App>(title: impl ToString) {
     let event_loop = EventLoop::new().unwrap();
     event_loop.set_control_flow(ControlFlow::Wait);
 
+    let monitor = event_loop.primary_monitor().unwrap();
+
     let window = WindowBuilder::new()
         .with_title(title.to_string())
-        .with_inner_size(PhysicalSize::new(width, height))
+        .with_inner_size(monitor.size())
+        .with_fullscreen(Some(Fullscreen::Borderless(None)))
+        .with_decorations(false)
         .with_resizable(false)
         .build(&event_loop)
         .unwrap();
@@ -151,8 +159,12 @@ fn run(mut app: impl App, title: impl ToString, width: u32, height: u32) {
     let context = softbuffer::Context::new(&window).unwrap();
     let mut surface = softbuffer::Surface::new(&context, &window).unwrap();
 
+    let size = window.inner_size();
+    let mut app = T::new(size.width, size.height);
+
     let mut next_frame = Instant::now();
-    let frame_time = Duration::from_secs_f32(1.0 / 144.0);
+    let refresh_rate = monitor.refresh_rate_millihertz().unwrap() as f32 / 1000.0;
+    let frame_time = Duration::from_secs_f32(1.0 / refresh_rate);
 
     let mut paused = false;
 
@@ -160,9 +172,9 @@ fn run(mut app: impl App, title: impl ToString, width: u32, height: u32) {
         .run(|event, target| match event {
             Event::AboutToWait => {
                 if Instant::now() >= next_frame && !paused {
+                    next_frame += frame_time;
                     app.tick();
                     window.request_redraw();
-                    next_frame += frame_time;
                 }
 
                 target.set_control_flow(ControlFlow::WaitUntil(next_frame));
@@ -193,6 +205,10 @@ fn run(mut app: impl App, title: impl ToString, width: u32, height: u32) {
                         PhysicalKey::Code(keycode) => keycode,
                         PhysicalKey::Unidentified(_) => panic!(),
                     };
+
+                    if keycode == KeyCode::Escape && !event.state.is_pressed() {
+                        target.exit();
+                    }
 
                     if keycode == KeyCode::Space && !event.state.is_pressed() {
                         paused = !paused;
