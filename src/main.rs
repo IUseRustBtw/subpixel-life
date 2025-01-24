@@ -112,6 +112,11 @@ impl App for GameOfLife {
                 let x = (index * 3) as u32 % self.width;
                 let y = (index * 3) as u32 / self.width;
 
+                // TODO: I'm pretty sure this way of setting the color for each cell in this
+                // TODO: pixel is wrong. I believe I need to convert the rgb color in some
+                // TODO: way to ensure that the output of the subpixels is actually what I
+                // TODO: want.
+
                 let mut color = 0xFF000000;
 
                 if self.cells_current[self.index(x, y)] {
